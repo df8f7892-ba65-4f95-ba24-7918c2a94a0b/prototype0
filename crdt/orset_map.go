@@ -18,7 +18,8 @@ const (
 type Operation struct {
 	Type  OperationType
 	Key   string
-	Value interface{} // Value is nil for remove operations
+	Value interface{}
+	Tags  map[uuid.UUID]bool
 	Time  time.Time
 }
 
@@ -29,7 +30,7 @@ type KeyValue struct {
 	Tombstone bool
 }
 
-// ORSetMap is a map of key-value pairs that supports add and remove operations
+// ORSetMap is an enhanced version of the ORSet where each key has one value and operation logs
 type ORSetMap struct {
 	elements map[string]*KeyValue
 	log      []Operation
@@ -44,72 +45,89 @@ func NewORSetMap() *ORSetMap {
 	}
 }
 
-// Add inserts or updates a key with a value into the ORSetMap
+func (o *ORSetMap) applyOperation(op Operation) {
+	switch op.Type {
+	case AddOperation:
+		elem, exists := o.elements[op.Key]
+		if !exists || elem.Tombstone {
+			// Create a new element or revive a tombstoned element
+			o.elements[op.Key] = &KeyValue{
+				Value:     op.Value,
+				Tags:      op.Tags,
+				Tombstone: false,
+			}
+		} else {
+			// Update existing element
+			elem.Value = op.Value
+			for tag := range op.Tags {
+				elem.Tags[tag] = true // Merge tags
+			}
+		}
+	case RemoveOperation:
+		if elem, ok := o.elements[op.Key]; ok {
+			elem.Tombstone = true
+			for tag := range elem.Tags {
+				delete(elem.Tags, tag) // Clear tags
+			}
+		}
+	}
+}
+
+// Add creates an operation for adding or updating a key and applies it
 func (o *ORSetMap) Add(key string, value interface{}) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	if elem, ok := o.elements[key]; ok && elem.Tombstone {
-		// Reset if tombstoned
-		elem.Tombstone = false
-		elem.Value = value
-		elem.Tags = map[uuid.UUID]bool{uuid.New(): true}
-	} else if !ok {
-		// Add new KeyValue if not exist
-		elem = &KeyValue{
-			Value:     value,
-			Tags:      map[uuid.UUID]bool{uuid.New(): true},
-			Tombstone: false,
-		}
-		o.elements[key] = elem
-	} else {
-		elem.Value = value
-		elem.Tags = map[uuid.UUID]bool{uuid.New(): true}
-	}
-
-	o.log = append(o.log, Operation{
+	newTags := map[uuid.UUID]bool{uuid.New(): true}
+	op := Operation{
 		Type:  AddOperation,
 		Key:   key,
 		Value: value,
+		Tags:  newTags,
 		Time:  time.Now(),
-	})
+	}
+	o.log = append(o.log, op)
+	o.applyOperation(op)
 }
 
-// Remove deletes a key from the ORSetMap
+// Remove creates an operation for removing a key and applies it
 func (o *ORSetMap) Remove(key string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	if elem, ok := o.elements[key]; ok {
-		// Mark as tombstone and remove all tags
-		elem.Tombstone = true
-		elem.Tags = make(map[uuid.UUID]bool)
+	tagsToBeRemoved := make(map[uuid.UUID]bool)
+	if elem, exists := o.elements[key]; exists {
+		for tag := range elem.Tags {
+			tagsToBeRemoved[tag] = true // Capture existing tags for the operation log
+		}
 	}
-
-	o.log = append(o.log, Operation{
+	op := Operation{
 		Type: RemoveOperation,
 		Key:  key,
+		Tags: tagsToBeRemoved,
 		Time: time.Now(),
-	})
+	}
+	o.log = append(o.log, op)
+	o.applyOperation(op)
 }
 
-// Contains checks if a key is present in the ORSetMap
+// Contains checks if a key is present in the ORSetMap and not marked as a tombstone
 func (o *ORSetMap) Contains(key string) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
 	elem, exists := o.elements[key]
-	return exists && !elem.Tombstone && len(elem.Tags) > 0
+	return exists && !elem.Tombstone
 }
 
-// List returns all key-value pairs in the ORSetMap
+// List returns all key-value pairs in the ORSetMap that are not marked as tombstones
 func (o *ORSetMap) List() map[string]interface{} {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
 	result := make(map[string]interface{})
 	for key, elem := range o.elements {
-		if len(elem.Tags) > 0 && !elem.Tombstone {
+		if !elem.Tombstone {
 			result[key] = elem.Value
 		}
 	}
@@ -121,16 +139,14 @@ func (o *ORSetMap) ExportLog() []Operation {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	return append([]Operation(nil), o.log...)
+	copiedLog := make([]Operation, len(o.log))
+	copy(copiedLog, o.log)
+	return copiedLog
 }
 
-// ImportLog imports an operation log and applies it to the ORSetMap
+// ImportLog imports an operation log and applies it directly
 func (o *ORSetMap) ImportLog(operations []Operation) {
 	for _, op := range operations {
-		if op.Type == AddOperation {
-			o.Add(op.Key, op.Value)
-		} else if op.Type == RemoveOperation {
-			o.Remove(op.Key)
-		}
+		o.applyOperation(op)
 	}
 }
