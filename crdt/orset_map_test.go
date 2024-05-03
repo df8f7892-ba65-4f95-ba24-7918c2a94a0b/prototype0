@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -110,6 +109,7 @@ func TestORSetMapOperations(t *testing.T) {
 			for key, expected := range tc.wantContains {
 				assert.Equal(t, expected, orsetMap.Contains(key), "Check Contains for key "+key)
 			}
+
 			gotList := orsetMap.List()
 			assert.Equal(t, tc.wantList, gotList, "Check List matches expected")
 
@@ -137,18 +137,18 @@ func TestORSetMapReplication(t *testing.T) {
 		{
 			name: "Add and remove single item",
 			operations: func() []Operation {
-				tag1 := uuid.New()
+				tag1 := Tag{Sequence: 1}
 				return []Operation{
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: "apple",
-						Tags:  map[uuid.UUID]bool{tag1: true},
+						Tags:  map[Tag]bool{tag1: true},
 					},
 					{
 						Type: RemoveOperation,
 						Key:  "fruit",
-						Tags: map[uuid.UUID]bool{tag1: true},
+						Tags: map[Tag]bool{tag1: true},
 					},
 				}
 			},
@@ -157,19 +157,19 @@ func TestORSetMapReplication(t *testing.T) {
 		{
 			name: "Add and remove non existent tag",
 			operations: func() []Operation {
-				tag1 := uuid.New()
-				tag2 := uuid.New()
+				tag1 := Tag{Sequence: 1}
+				tag2 := Tag{Sequence: 2}
 				return []Operation{
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: "apple",
-						Tags:  map[uuid.UUID]bool{tag1: true},
+						Tags:  map[Tag]bool{tag1: true},
 					},
 					{
 						Type: RemoveOperation,
 						Key:  "fruit",
-						Tags: map[uuid.UUID]bool{tag2: true},
+						Tags: map[Tag]bool{tag2: true},
 					},
 				}
 			},
@@ -185,13 +185,13 @@ func TestORSetMapReplication(t *testing.T) {
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: "apple",
-						Tags:  map[uuid.UUID]bool{uuid.New(): true},
+						Tags:  map[Tag]bool{Tag{Sequence: 1}: true},
 					},
 					{
 						Type:  AddOperation,
 						Key:   "vegetable",
 						Value: "carrot",
-						Tags:  map[uuid.UUID]bool{uuid.New(): true},
+						Tags:  map[Tag]bool{Tag{Sequence: 2}: true},
 					},
 				}
 			},
@@ -200,19 +200,19 @@ func TestORSetMapReplication(t *testing.T) {
 		{
 			name: "Update existing item",
 			operations: func() []Operation {
-				tag1 := uuid.New() // Ensure same tag for proper update testing
+				tag1 := Tag{Sequence: 1}
 				return []Operation{
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: "apple",
-						Tags:  map[uuid.UUID]bool{tag1: true},
+						Tags:  map[Tag]bool{tag1: true},
 					},
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: "banana",
-						Tags:  map[uuid.UUID]bool{tag1: true},
+						Tags:  map[Tag]bool{tag1: true},
 					},
 				}
 			},
@@ -221,25 +221,25 @@ func TestORSetMapReplication(t *testing.T) {
 		{
 			name: "Add item twice, remove only one",
 			operations: func() []Operation {
-				tag1 := uuid.New()
-				tag2 := uuid.New()
+				tag1 := Tag{Sequence: 1}
+				tag2 := Tag{Sequence: 2}
 				return []Operation{
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: "apple",
-						Tags:  map[uuid.UUID]bool{tag1: true},
+						Tags:  map[Tag]bool{tag1: true},
 					},
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: "apple",
-						Tags:  map[uuid.UUID]bool{tag2: true},
+						Tags:  map[Tag]bool{tag2: true},
 					},
 					{
 						Type: RemoveOperation,
 						Key:  "fruit",
-						Tags: map[uuid.UUID]bool{tag1: true},
+						Tags: map[Tag]bool{tag1: true},
 					},
 				}
 			},
@@ -250,30 +250,30 @@ func TestORSetMapReplication(t *testing.T) {
 		{
 			name: "Add item twice, remove both",
 			operations: func() []Operation {
-				tag1 := uuid.New()
-				tag2 := uuid.New()
+				tag1 := Tag{Sequence: 1}
+				tag2 := Tag{Sequence: 2}
 				return []Operation{
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: "apple",
-						Tags:  map[uuid.UUID]bool{tag1: true},
+						Tags:  map[Tag]bool{tag1: true},
 					},
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: "apple",
-						Tags:  map[uuid.UUID]bool{tag2: true},
+						Tags:  map[Tag]bool{tag2: true},
 					},
 					{
 						Type: RemoveOperation,
 						Key:  "fruit",
-						Tags: map[uuid.UUID]bool{tag1: true},
+						Tags: map[Tag]bool{tag1: true},
 					},
 					{
 						Type: RemoveOperation,
 						Key:  "fruit",
-						Tags: map[uuid.UUID]bool{tag2: true},
+						Tags: map[Tag]bool{tag2: true},
 					},
 				}
 			},
