@@ -65,9 +65,11 @@ func (o *ORSetMap) applyOperation(op Operation) {
 		}
 	case RemoveOperation:
 		if elem, ok := o.elements[op.Key]; ok {
-			elem.Tombstone = true
-			for tag := range elem.Tags {
-				delete(elem.Tags, tag) // Clear tags
+			for tag := range op.Tags {
+				delete(elem.Tags, tag) // Remove tags
+			}
+			if len(elem.Tags) == 0 {
+				elem.Tombstone = true
 			}
 		}
 	}
