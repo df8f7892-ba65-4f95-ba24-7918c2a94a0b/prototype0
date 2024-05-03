@@ -1,8 +1,10 @@
 package crdt
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -123,5 +125,174 @@ func TestORSetMapOperations(t *testing.T) {
 				assert.Equal(t, tc.wantList, gotReplicatedList, "Replicated Check List matches expected")
 			}
 		})
+	}
+}
+
+func TestORSetMapReplication(t *testing.T) {
+	tests := []struct {
+		name       string
+		operations func() []Operation
+		expected   map[string]interface{}
+	}{
+		{
+			name: "Add and remove single item",
+			operations: func() []Operation {
+				tag1 := uuid.New()
+				return []Operation{
+					{
+						Type:  AddOperation,
+						Key:   "fruit",
+						Value: "apple",
+						Tags:  map[uuid.UUID]bool{tag1: true},
+					},
+					{
+						Type: RemoveOperation,
+						Key:  "fruit",
+						Tags: map[uuid.UUID]bool{tag1: true},
+					},
+				}
+			},
+			expected: map[string]interface{}{},
+		},
+		{
+			name: "Add and remove non existent tag",
+			operations: func() []Operation {
+				tag1 := uuid.New()
+				tag2 := uuid.New()
+				return []Operation{
+					{
+						Type:  AddOperation,
+						Key:   "fruit",
+						Value: "apple",
+						Tags:  map[uuid.UUID]bool{tag1: true},
+					},
+					{
+						Type: RemoveOperation,
+						Key:  "fruit",
+						Tags: map[uuid.UUID]bool{tag2: true},
+					},
+				}
+			},
+			expected: map[string]interface{}{
+				"fruit": "apple",
+			},
+		},
+		{
+			name: "Add multiple items",
+			operations: func() []Operation {
+				return []Operation{
+					{
+						Type:  AddOperation,
+						Key:   "fruit",
+						Value: "apple",
+						Tags:  map[uuid.UUID]bool{uuid.New(): true},
+					},
+					{
+						Type:  AddOperation,
+						Key:   "vegetable",
+						Value: "carrot",
+						Tags:  map[uuid.UUID]bool{uuid.New(): true},
+					},
+				}
+			},
+			expected: map[string]interface{}{"fruit": "apple", "vegetable": "carrot"},
+		},
+		{
+			name: "Update existing item",
+			operations: func() []Operation {
+				tag1 := uuid.New() // Ensure same tag for proper update testing
+				return []Operation{
+					{
+						Type:  AddOperation,
+						Key:   "fruit",
+						Value: "apple",
+						Tags:  map[uuid.UUID]bool{tag1: true},
+					},
+					{
+						Type:  AddOperation,
+						Key:   "fruit",
+						Value: "banana",
+						Tags:  map[uuid.UUID]bool{tag1: true},
+					},
+				}
+			},
+			expected: map[string]interface{}{"fruit": "banana"},
+		},
+		{
+			name: "Add item twice, remove only one",
+			operations: func() []Operation {
+				tag1 := uuid.New()
+				tag2 := uuid.New()
+				return []Operation{
+					{
+						Type:  AddOperation,
+						Key:   "fruit",
+						Value: "apple",
+						Tags:  map[uuid.UUID]bool{tag1: true},
+					},
+					{
+						Type:  AddOperation,
+						Key:   "fruit",
+						Value: "apple",
+						Tags:  map[uuid.UUID]bool{tag2: true},
+					},
+					{
+						Type: RemoveOperation,
+						Key:  "fruit",
+						Tags: map[uuid.UUID]bool{tag1: true},
+					},
+				}
+			},
+			expected: map[string]interface{}{
+				"fruit": "apple",
+			},
+		},
+		{
+			name: "Add item twice, remove both",
+			operations: func() []Operation {
+				tag1 := uuid.New()
+				tag2 := uuid.New()
+				return []Operation{
+					{
+						Type:  AddOperation,
+						Key:   "fruit",
+						Value: "apple",
+						Tags:  map[uuid.UUID]bool{tag1: true},
+					},
+					{
+						Type:  AddOperation,
+						Key:   "fruit",
+						Value: "apple",
+						Tags:  map[uuid.UUID]bool{tag2: true},
+					},
+					{
+						Type: RemoveOperation,
+						Key:  "fruit",
+						Tags: map[uuid.UUID]bool{tag1: true},
+					},
+					{
+						Type: RemoveOperation,
+						Key:  "fruit",
+						Tags: map[uuid.UUID]bool{tag2: true},
+					},
+				}
+			},
+			expected: map[string]interface{}{},
+		},
+	}
+
+	for _, tt := range tests {
+		// Create a new ORSetMap for each test case
+		orsetMap := NewORSetMap()
+
+		// Generate and apply operations
+		operations := tt.operations()
+		for _, op := range operations {
+			orsetMap.applyOperation(op)
+		}
+
+		// Verify the results
+		result := orsetMap.List()
+		assert.Equal(t, tt.expected, result, fmt.Sprintf("Test case: %s", tt.name))
 	}
 }
