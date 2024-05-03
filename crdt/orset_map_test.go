@@ -8,10 +8,11 @@ import (
 
 func TestORSetMapOperations(t *testing.T) {
 	tests := []struct {
-		name         string
-		operations   func(set *ORSetMap)
-		wantContains map[string]bool
-		wantList     map[string]interface{}
+		name          string
+		operations    func(set *ORSetMap)
+		wantContains  map[string]bool
+		wantList      map[string]interface{}
+		testReplicate bool // Indicates if replication via log should be tested
 	}{
 		{
 			name: "Add single elements",
@@ -31,6 +32,7 @@ func TestORSetMapOperations(t *testing.T) {
 				"computer": "laptop",
 				"car":      "Toyota",
 			},
+			testReplicate: true,
 		},
 		{
 			name: "Update existing element",
@@ -44,6 +46,7 @@ func TestORSetMapOperations(t *testing.T) {
 			wantList: map[string]interface{}{
 				"fruit": "banana",
 			},
+			testReplicate: true,
 		},
 		{
 			name: "Remove element",
@@ -54,7 +57,8 @@ func TestORSetMapOperations(t *testing.T) {
 			wantContains: map[string]bool{
 				"fruit": false,
 			},
-			wantList: map[string]interface{}{},
+			wantList:      map[string]interface{}{},
+			testReplicate: true,
 		},
 		{
 			name: "Remove and re-add element",
@@ -69,6 +73,7 @@ func TestORSetMapOperations(t *testing.T) {
 			wantList: map[string]interface{}{
 				"fruit": "cherry",
 			},
+			testReplicate: true,
 		},
 		{
 			name: "Remove non-existent element",
@@ -78,7 +83,8 @@ func TestORSetMapOperations(t *testing.T) {
 			wantContains: map[string]bool{
 				"fruit": false,
 			},
-			wantList: map[string]interface{}{},
+			wantList:      map[string]interface{}{},
+			testReplicate: true,
 		},
 		{
 			name: "Add, Update, Remove element",
@@ -90,7 +96,8 @@ func TestORSetMapOperations(t *testing.T) {
 			wantContains: map[string]bool{
 				"fruit": false,
 			},
-			wantList: map[string]interface{}{},
+			wantList:      map[string]interface{}{},
+			testReplicate: true,
 		},
 	}
 
@@ -103,6 +110,18 @@ func TestORSetMapOperations(t *testing.T) {
 			}
 			gotList := orsetMap.List()
 			assert.Equal(t, tc.wantList, gotList, "Check List matches expected")
+
+			// Test replication if required
+			if tc.testReplicate {
+				anotherORSetMap := NewORSetMap()
+				log := orsetMap.ExportLog()
+				anotherORSetMap.ImportLog(log)
+				for key, expected := range tc.wantContains {
+					assert.Equal(t, expected, anotherORSetMap.Contains(key), "Replicated Check Contains for key "+key)
+				}
+				gotReplicatedList := anotherORSetMap.List()
+				assert.Equal(t, tc.wantList, gotReplicatedList, "Replicated Check List matches expected")
+			}
 		})
 	}
 }
