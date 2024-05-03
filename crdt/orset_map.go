@@ -3,8 +3,6 @@ package crdt
 import (
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type OperationType int
@@ -14,20 +12,30 @@ const (
 	RemoveOperation
 )
 
+type Tag struct {
+	// TODO: Add user id
+	Sequence uint64
+}
+
 type Operation struct {
 	Type  OperationType
 	Key   string
 	Value interface{}
-	Tags  map[uuid.UUID]bool
+	Tags  map[Tag]bool
 	Time  time.Time
 }
 
+type ValueDetail struct {
+	Value     interface{}
+	Tombstone bool
+}
+
 type KeyValue struct {
-	Value interface{}
-	Tags  map[uuid.UUID]bool
+	Tags map[Tag]*ValueDetail
 }
 
 type ORSetMap struct {
+	sequence uint64
 	elements map[string]*KeyValue
 	log      []Operation
 	mu       sync.Mutex
@@ -43,22 +51,25 @@ func NewORSetMap() *ORSetMap {
 func (o *ORSetMap) applyOperation(op Operation) {
 	switch op.Type {
 	case AddOperation:
+		// TODO: Can there be more than one tags on an add operation?
 		elem, exists := o.elements[op.Key]
 		if !exists {
 			o.elements[op.Key] = &KeyValue{
-				Value: op.Value,
-				Tags:  op.Tags,
+				Tags: map[Tag]*ValueDetail{},
 			}
-		} else {
-			elem.Value = op.Value
-			for tag := range op.Tags {
-				elem.Tags[tag] = true
+			elem = o.elements[op.Key]
+		}
+		for tag := range op.Tags {
+			elem.Tags[tag] = &ValueDetail{
+				Value: op.Value,
 			}
 		}
 	case RemoveOperation:
 		if elem, ok := o.elements[op.Key]; ok {
 			for tag := range op.Tags {
-				delete(elem.Tags, tag)
+				if value, exists := elem.Tags[tag]; exists {
+					value.Tombstone = true
+				}
 			}
 		}
 	}
@@ -68,12 +79,17 @@ func (o *ORSetMap) Add(key string, value interface{}) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	newTags := map[uuid.UUID]bool{uuid.New(): true}
+	o.sequence++
+
+	newTag := Tag{
+		Sequence: o.sequence,
+	}
+
 	op := Operation{
 		Type:  AddOperation,
 		Key:   key,
 		Value: value,
-		Tags:  newTags,
+		Tags:  map[Tag]bool{newTag: true},
 		Time:  time.Now(),
 	}
 	o.log = append(o.log, op)
@@ -84,7 +100,7 @@ func (o *ORSetMap) Remove(key string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	tagsToBeRemoved := make(map[uuid.UUID]bool)
+	tagsToBeRemoved := make(map[Tag]bool)
 	if elem, exists := o.elements[key]; exists {
 		for tag := range elem.Tags {
 			tagsToBeRemoved[tag] = true
@@ -105,7 +121,17 @@ func (o *ORSetMap) Contains(key string) bool {
 	defer o.mu.Unlock()
 
 	elem, exists := o.elements[key]
-	return exists && len(elem.Tags) > 0
+	if !exists {
+		return false
+	}
+
+	for _, value := range elem.Tags {
+		if !value.Tombstone {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (o *ORSetMap) List() map[string]interface{} {
@@ -114,10 +140,19 @@ func (o *ORSetMap) List() map[string]interface{} {
 
 	result := make(map[string]interface{})
 	for key, elem := range o.elements {
-		if len(elem.Tags) > 0 {
-			result[key] = elem.Value
+		var maxPriority int
+		var maxValue interface{}
+		for tag, value := range elem.Tags {
+			if int(tag.Sequence) > maxPriority && !value.Tombstone {
+				maxPriority = int(tag.Sequence)
+				maxValue = value.Value
+			}
+		}
+		if maxValue != nil {
+			result[key] = maxValue
 		}
 	}
+
 	return result
 }
 
