@@ -2,9 +2,25 @@ package crdt
 
 import (
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+type OperationType int
+
+const (
+	AddOperation OperationType = iota
+	RemoveOperation
+)
+
+// Operation represents an operation in the log
+type Operation struct {
+	Type  OperationType
+	Key   string
+	Value interface{} // Value is nil for remove operations
+	Time  time.Time
+}
 
 // KeyValue represents a key with its value in the ORSetMap
 type KeyValue struct {
@@ -16,6 +32,7 @@ type KeyValue struct {
 // ORSetMap is a map of key-value pairs that supports add and remove operations
 type ORSetMap struct {
 	elements map[string]*KeyValue
+	log      []Operation
 	mu       sync.Mutex
 }
 
@@ -23,6 +40,7 @@ type ORSetMap struct {
 func NewORSetMap() *ORSetMap {
 	return &ORSetMap{
 		elements: make(map[string]*KeyValue),
+		log:      []Operation{},
 	}
 }
 
@@ -38,16 +56,23 @@ func (o *ORSetMap) Add(key string, value interface{}) {
 		elem.Tags = map[uuid.UUID]bool{uuid.New(): true}
 	} else if !ok {
 		// Add new KeyValue if not exist
-		o.elements[key] = &KeyValue{
+		elem = &KeyValue{
 			Value:     value,
 			Tags:      map[uuid.UUID]bool{uuid.New(): true},
 			Tombstone: false,
 		}
+		o.elements[key] = elem
 	} else {
-		// Update existing KeyValue
 		elem.Value = value
 		elem.Tags = map[uuid.UUID]bool{uuid.New(): true}
 	}
+
+	o.log = append(o.log, Operation{
+		Type:  AddOperation,
+		Key:   key,
+		Value: value,
+		Time:  time.Now(),
+	})
 }
 
 // Remove deletes a key from the ORSetMap
@@ -60,6 +85,12 @@ func (o *ORSetMap) Remove(key string) {
 		elem.Tombstone = true
 		elem.Tags = make(map[uuid.UUID]bool)
 	}
+
+	o.log = append(o.log, Operation{
+		Type: RemoveOperation,
+		Key:  key,
+		Time: time.Now(),
+	})
 }
 
 // Contains checks if a key is present in the ORSetMap
@@ -83,4 +114,23 @@ func (o *ORSetMap) List() map[string]interface{} {
 		}
 	}
 	return result
+}
+
+// ExportLog exports the operation log
+func (o *ORSetMap) ExportLog() []Operation {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	return append([]Operation(nil), o.log...)
+}
+
+// ImportLog imports an operation log and applies it to the ORSetMap
+func (o *ORSetMap) ImportLog(operations []Operation) {
+	for _, op := range operations {
+		if op.Type == AddOperation {
+			o.Add(op.Key, op.Value)
+		} else if op.Type == RemoveOperation {
+			o.Remove(op.Key)
+		}
+	}
 }
