@@ -21,9 +21,10 @@ type (
 		Repeated   bool       `parser:"@'repeated'?"`
 		Type       string     `parser:"@Ident"`
 		Tag        int        `parser:"'=' @Int"`
-		Properties Properties `parser:"'{' '}'"`
+		Properties Properties `parser:"'{' @@* '}'"`
 	}
 	Properties struct {
+		Required bool `parser:"'required'':' (@'true' | 'false') ','?"`
 	}
 )
 

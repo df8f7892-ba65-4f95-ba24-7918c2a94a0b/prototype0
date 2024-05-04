@@ -105,6 +105,44 @@ context prototype0_blogging {
 				},
 			},
 		},
+		{
+			name: "Properties true",
+			schemaStr: `
+context prototype0_blogging {
+	record post Struct {
+		attribute title string = 1 {
+			required: false,
+		}
+		attribute body string = 2 {
+			required: true,
+		}
+	}
+}`,
+			expected: &Schema{
+				Context: "prototype0_blogging",
+				Records: []Record{
+					{
+						Name: "post",
+						Type: "Struct",
+						Attributes: []Attribute{{
+							Name: "title",
+							Type: "string",
+							Tag:  1,
+							Properties: Properties{
+								Required: false,
+							},
+						}, {
+							Name: "body",
+							Type: "string",
+							Tag:  2,
+							Properties: Properties{
+								Required: true,
+							},
+						}},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
