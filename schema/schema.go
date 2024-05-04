@@ -24,7 +24,13 @@ type (
 		Properties Properties `parser:"'{' @@* '}'"`
 	}
 	Properties struct {
-		Required bool `parser:"'required'':' (@'true' | 'false') ','?"`
+		Mutable    bool        `parser:"'mutable'':' (@'true' | 'false') ','?"`
+		Validation *Validation `parser:"'validation'':' '{' @@ '}' ','?"`
+	}
+	Validation struct {
+		Required  bool `parser:"'required'':' (@'true' | 'false') ','?"`
+		MaxLength int  `parser:"'maxLen'':' @Int ','?"`
+		MinLength int  `parser:"'minLen'':' @Int ','?"`
 	}
 )
 

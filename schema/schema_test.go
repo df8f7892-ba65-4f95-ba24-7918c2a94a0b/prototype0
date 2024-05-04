@@ -106,15 +106,25 @@ context prototype0_blogging {
 			},
 		},
 		{
-			name: "Properties true",
+			name: "Properties and validation",
 			schemaStr: `
 context prototype0_blogging {
 	record post Struct {
 		attribute title string = 1 {
-			required: false,
+			mutable: false,
+			validation: {
+				required: false,
+				maxLen: 100,
+				minLen: 10,
+			},
 		}
 		attribute body string = 2 {
-			required: true,
+			mutable: true,
+			validation: {
+				required: true,
+				maxLen: 1000,
+				minLen: 100,
+			},
 		}
 	}
 }`,
@@ -129,14 +139,24 @@ context prototype0_blogging {
 							Type: "string",
 							Tag:  1,
 							Properties: Properties{
-								Required: false,
+								Mutable: false,
+								Validation: &Validation{
+									Required:  false,
+									MaxLength: 100,
+									MinLength: 10,
+								},
 							},
 						}, {
 							Name: "body",
 							Type: "string",
 							Tag:  2,
 							Properties: Properties{
-								Required: true,
+								Mutable: true,
+								Validation: &Validation{
+									Required:  true,
+									MaxLength: 1000,
+									MinLength: 100,
+								},
 							},
 						}},
 					},
