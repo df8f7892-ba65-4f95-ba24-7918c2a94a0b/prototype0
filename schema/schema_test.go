@@ -22,6 +22,7 @@ func TestSchemaParser(t *testing.T) {
 			name: "Basic Struct",
 			schemaStr: `
 context prototype0_blogging {
+	version 1,
 	record post Struct {
 		attribute title string = 1 {}
 		attribute body string = 2 {}
@@ -30,6 +31,7 @@ context prototype0_blogging {
 }`,
 			expected: &Schema{
 				Context: "prototype0_blogging",
+				Version: 1,
 				Records: []*Record{{
 					Name: "post",
 					Type: "Struct",

@@ -8,8 +8,9 @@ import (
 
 type (
 	Schema struct {
-		Context string    `parser:"'context' @Ident"`
-		Records []*Record `parser:"'{' @@* '}'"`
+		Context string    `parser:"'context' @Ident '{'"`
+		Version int       `parser:"('version' @Int ',')?"`
+		Records []*Record `parser:"@@* '}'"`
 	}
 	Record struct {
 		Name       string       `parser:"'record' @Ident"`
