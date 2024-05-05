@@ -30,25 +30,25 @@ context prototype0_blogging {
 }`,
 			expected: &Schema{
 				Context: "prototype0_blogging",
-				Records: []Record{{
+				Records: []*Record{{
 					Name: "post",
 					Type: "Struct",
-					Attributes: []Attribute{{
+					Attributes: []*Attribute{{
 						Name:       "title",
 						Type:       "string",
 						Tag:        1,
-						Properties: Properties{},
+						Properties: nil,
 					}, {
 						Name:       "body",
 						Type:       "string",
 						Tag:        2,
-						Properties: Properties{},
+						Properties: nil,
 					}, {
 						Name:       "tags",
 						Type:       "string",
 						Tag:        3,
 						Repeated:   true,
-						Properties: Properties{},
+						Properties: nil,
 					}},
 				}},
 			},
@@ -61,7 +61,7 @@ context prototype0_blogging {
 }`,
 			expected: &Schema{
 				Context: "prototype0_blogging",
-				Records: []Record{{
+				Records: []*Record{{
 					Name:       "empty",
 					Type:       "Struct",
 					Attributes: nil,
@@ -81,25 +81,25 @@ context prototype0_blogging {
 }`,
 			expected: &Schema{
 				Context: "prototype0_blogging",
-				Records: []Record{
+				Records: []*Record{
 					{
 						Name: "post",
 						Type: "Struct",
-						Attributes: []Attribute{{
+						Attributes: []*Attribute{{
 							Name:       "title",
 							Type:       "string",
 							Tag:        1,
-							Properties: Properties{},
+							Properties: nil,
 						}},
 					},
 					{
 						Name: "comment",
 						Type: "Struct",
-						Attributes: []Attribute{{
+						Attributes: []*Attribute{{
 							Name:       "content",
 							Type:       "string",
 							Tag:        1,
-							Properties: Properties{},
+							Properties: nil,
 						}},
 					},
 				},
@@ -121,41 +121,56 @@ context prototype0_blogging {
 		attribute body string = 2 {
 			mutable: true,
 			validation: {
+				minLen: 100,
 				required: true,
 				maxLen: 1000,
-				minLen: 100,
 			},
 		}
 	}
 }`,
 			expected: &Schema{
 				Context: "prototype0_blogging",
-				Records: []Record{
+				Records: []*Record{
 					{
 						Name: "post",
 						Type: "Struct",
-						Attributes: []Attribute{{
+						Attributes: []*Attribute{{
 							Name: "title",
 							Type: "string",
 							Tag:  1,
-							Properties: Properties{
+							Properties: &Properties{
 								Mutable: false,
+								ValidationFields: []*ValidationField{{
+									// TODO: Required here should be false
+									Required: nil,
+								}, {
+									MaxLength: ptrInt(100),
+								}, {
+									MinLength: ptrInt(10),
+								}},
 								Validation: &Validation{
 									Required:  false,
-									MaxLength: 100,
-									MinLength: 10,
+									MaxLength: ptrInt(100),
+									MinLength: ptrInt(10),
 								},
 							},
 						}, {
 							Name: "body",
 							Type: "string",
 							Tag:  2,
-							Properties: Properties{
+							Properties: &Properties{
 								Mutable: true,
+								ValidationFields: []*ValidationField{{
+									MinLength: ptrInt(100),
+								}, {
+									Required: ptrBool(true),
+								}, {
+									MaxLength: ptrInt(1000),
+								}},
 								Validation: &Validation{
 									Required:  true,
-									MaxLength: 1000,
-									MinLength: 100,
+									MaxLength: ptrInt(1000),
+									MinLength: ptrInt(100),
 								},
 							},
 						}},
@@ -176,4 +191,12 @@ context prototype0_blogging {
 			assert.Equal(t, tc.expected, schema)
 		})
 	}
+}
+
+func ptrBool(b bool) *bool {
+	return &b
+}
+
+func ptrInt(i int) *int {
+	return &i
 }
