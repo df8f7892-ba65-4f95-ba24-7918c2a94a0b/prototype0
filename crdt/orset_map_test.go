@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/df8f7892-ba65-4f95-ba24-7918c2a94a0b/prototype0/scalar"
 )
 
 func TestORSetMapOperations(t *testing.T) {
@@ -12,15 +14,15 @@ func TestORSetMapOperations(t *testing.T) {
 		name          string
 		operations    func(set *ORSetMap)
 		wantContains  map[string]bool
-		wantList      map[string]interface{}
+		wantList      map[string]Value
 		testReplicate bool // Indicates if replication via log should be tested
 	}{
 		{
 			name: "Add single elements",
 			operations: func(set *ORSetMap) {
-				set.Add("fruit", "apple")
-				set.Add("computer", "laptop")
-				set.Add("car", "Toyota")
+				set.Add("fruit", scalar.New("apple"))
+				set.Add("computer", scalar.New("laptop"))
+				set.Add("car", scalar.New("Toyota"))
 			},
 			wantContains: map[string]bool{
 				"fruit":    true,
@@ -28,51 +30,51 @@ func TestORSetMapOperations(t *testing.T) {
 				"car":      true,
 				"bike":     false,
 			},
-			wantList: map[string]interface{}{
-				"fruit":    "apple",
-				"computer": "laptop",
-				"car":      "Toyota",
+			wantList: map[string]Value{
+				"fruit":    scalar.New("apple"),
+				"computer": scalar.New("laptop"),
+				"car":      scalar.New("Toyota"),
 			},
 			testReplicate: true,
 		},
 		{
 			name: "Update existing element",
 			operations: func(set *ORSetMap) {
-				set.Add("fruit", "apple")
-				set.Add("fruit", "banana")
+				set.Add("fruit", scalar.New("apple"))
+				set.Add("fruit", scalar.New("banana"))
 			},
 			wantContains: map[string]bool{
 				"fruit": true,
 			},
-			wantList: map[string]interface{}{
-				"fruit": "banana",
+			wantList: map[string]Value{
+				"fruit": scalar.New("banana"),
 			},
 			testReplicate: true,
 		},
 		{
 			name: "Remove element",
 			operations: func(set *ORSetMap) {
-				set.Add("fruit", "apple")
+				set.Add("fruit", scalar.New("apple"))
 				set.Remove("fruit")
 			},
 			wantContains: map[string]bool{
 				"fruit": false,
 			},
-			wantList:      map[string]interface{}{},
+			wantList:      map[string]Value{},
 			testReplicate: true,
 		},
 		{
 			name: "Remove and re-add element",
 			operations: func(set *ORSetMap) {
-				set.Add("fruit", "apple")
+				set.Add("fruit", scalar.New("apple"))
 				set.Remove("fruit")
-				set.Add("fruit", "cherry")
+				set.Add("fruit", scalar.New("cherry"))
 			},
 			wantContains: map[string]bool{
 				"fruit": true,
 			},
-			wantList: map[string]interface{}{
-				"fruit": "cherry",
+			wantList: map[string]Value{
+				"fruit": scalar.New("cherry"),
 			},
 			testReplicate: true,
 		},
@@ -84,20 +86,20 @@ func TestORSetMapOperations(t *testing.T) {
 			wantContains: map[string]bool{
 				"fruit": false,
 			},
-			wantList:      map[string]interface{}{},
+			wantList:      map[string]Value{},
 			testReplicate: true,
 		},
 		{
 			name: "Add, Update, Remove element",
 			operations: func(set *ORSetMap) {
-				set.Add("fruit", "apple")
-				set.Add("fruit", "banana")
+				set.Add("fruit", scalar.New("apple"))
+				set.Add("fruit", scalar.New("banana"))
 				set.Remove("fruit")
 			},
 			wantContains: map[string]bool{
 				"fruit": false,
 			},
-			wantList:      map[string]interface{}{},
+			wantList:      map[string]Value{},
 			testReplicate: true,
 		},
 	}
@@ -132,7 +134,7 @@ func TestORSetMapReplication(t *testing.T) {
 	tests := []struct {
 		name       string
 		operations func() []Operation
-		expected   map[string]interface{}
+		expected   map[string]Value
 	}{
 		{
 			name: "Add and remove single item",
@@ -142,7 +144,7 @@ func TestORSetMapReplication(t *testing.T) {
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
-						Value: "apple",
+						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag1: true},
 					},
 					{
@@ -152,7 +154,7 @@ func TestORSetMapReplication(t *testing.T) {
 					},
 				}
 			},
-			expected: map[string]interface{}{},
+			expected: map[string]Value{},
 		},
 		{
 			name: "Add and remove non existent tag",
@@ -163,7 +165,7 @@ func TestORSetMapReplication(t *testing.T) {
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
-						Value: "apple",
+						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag1: true},
 					},
 					{
@@ -173,8 +175,8 @@ func TestORSetMapReplication(t *testing.T) {
 					},
 				}
 			},
-			expected: map[string]interface{}{
-				"fruit": "apple",
+			expected: map[string]Value{
+				"fruit": scalar.New("apple"),
 			},
 		},
 		{
@@ -184,18 +186,21 @@ func TestORSetMapReplication(t *testing.T) {
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
-						Value: "apple",
+						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{Tag{Sequence: 1}: true},
 					},
 					{
 						Type:  AddOperation,
 						Key:   "vegetable",
-						Value: "carrot",
+						Value: scalar.New("carrot"),
 						Tags:  map[Tag]bool{Tag{Sequence: 2}: true},
 					},
 				}
 			},
-			expected: map[string]interface{}{"fruit": "apple", "vegetable": "carrot"},
+			expected: map[string]Value{
+				"fruit":     scalar.New("apple"),
+				"vegetable": scalar.New("carrot"),
+			},
 		},
 		{
 			name: "Update existing item",
@@ -205,18 +210,20 @@ func TestORSetMapReplication(t *testing.T) {
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
-						Value: "apple",
+						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag1: true},
 					},
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
-						Value: "banana",
+						Value: scalar.New("banana"),
 						Tags:  map[Tag]bool{tag1: true},
 					},
 				}
 			},
-			expected: map[string]interface{}{"fruit": "banana"},
+			expected: map[string]Value{
+				"fruit": scalar.New("banana"),
+			},
 		},
 		{
 			name: "Add item twice, remove only one",
@@ -227,13 +234,13 @@ func TestORSetMapReplication(t *testing.T) {
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
-						Value: "apple",
+						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag1: true},
 					},
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
-						Value: "apple",
+						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag2: true},
 					},
 					{
@@ -243,8 +250,8 @@ func TestORSetMapReplication(t *testing.T) {
 					},
 				}
 			},
-			expected: map[string]interface{}{
-				"fruit": "apple",
+			expected: map[string]Value{
+				"fruit": scalar.New("apple"),
 			},
 		},
 		{
@@ -256,13 +263,13 @@ func TestORSetMapReplication(t *testing.T) {
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
-						Value: "apple",
+						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag1: true},
 					},
 					{
 						Type:  AddOperation,
 						Key:   "fruit",
-						Value: "apple",
+						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag2: true},
 					},
 					{
@@ -277,7 +284,7 @@ func TestORSetMapReplication(t *testing.T) {
 					},
 				}
 			},
-			expected: map[string]interface{}{},
+			expected: map[string]Value{},
 		},
 	}
 

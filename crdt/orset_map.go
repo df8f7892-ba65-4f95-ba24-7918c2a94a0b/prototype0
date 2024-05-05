@@ -3,7 +3,19 @@ package crdt
 import (
 	"sync"
 	"time"
+
+	"github.com/df8f7892-ba65-4f95-ba24-7918c2a94a0b/prototype0/scalar"
 )
+
+type Value interface {
+	Type() scalar.Type
+	String() (string, bool)
+	Int64() (int64, bool)
+	Uint64() (uint64, bool)
+	Float64() (float64, bool)
+	ByteSlice() ([]byte, bool)
+	Bool() (bool, bool)
+}
 
 type OperationType int
 
@@ -20,18 +32,31 @@ type Tag struct {
 type Operation struct {
 	Type  OperationType
 	Key   string
-	Value interface{}
+	Value Value
 	Tags  map[Tag]bool
 	Time  time.Time
 }
 
 type ValueDetail struct {
-	Value     interface{}
+	Value     Value
 	Tombstone bool
 }
 
 type KeyValue struct {
 	Tags map[Tag]*ValueDetail
+}
+
+func (kv *KeyValue) Resolve() Value {
+	var maxPriority int
+	var maxValue Value
+	for tag, value := range kv.Tags {
+		if int(tag.Sequence) > maxPriority && !value.Tombstone {
+			maxPriority = int(tag.Sequence)
+			maxValue = value.Value
+		}
+	}
+
+	return maxValue
 }
 
 type ORSetMap struct {
@@ -75,7 +100,7 @@ func (o *ORSetMap) applyOperation(op Operation) {
 	}
 }
 
-func (o *ORSetMap) Add(key string, value interface{}) {
+func (o *ORSetMap) Add(key string, value Value) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
@@ -94,6 +119,18 @@ func (o *ORSetMap) Add(key string, value interface{}) {
 	}
 	o.log = append(o.log, op)
 	o.applyOperation(op)
+}
+
+func (o *ORSetMap) Get(key string) Value {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	elem, exists := o.elements[key]
+	if !exists {
+		return nil
+	}
+
+	return elem.Resolve()
 }
 
 func (o *ORSetMap) Remove(key string) {
@@ -134,22 +171,15 @@ func (o *ORSetMap) Contains(key string) bool {
 	return false
 }
 
-func (o *ORSetMap) List() map[string]interface{} {
+func (o *ORSetMap) List() map[string]Value {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	result := make(map[string]interface{})
+	result := make(map[string]Value)
 	for key, elem := range o.elements {
-		var maxPriority int
-		var maxValue interface{}
-		for tag, value := range elem.Tags {
-			if int(tag.Sequence) > maxPriority && !value.Tombstone {
-				maxPriority = int(tag.Sequence)
-				maxValue = value.Value
-			}
-		}
-		if maxValue != nil {
-			result[key] = maxValue
+		value := elem.Resolve()
+		if value != nil {
+			result[key] = value
 		}
 	}
 
