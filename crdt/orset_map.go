@@ -24,26 +24,35 @@ const (
 	RemoveOperation
 )
 
-type Tag struct {
-	// TODO: Add user id
-	Sequence uint64
-}
+type (
+	Tag struct {
+		Sequence uint64
+	}
+	Mutation struct {
+		Operations []*Operation
+		Parents    []string
+		Owner      string
+	}
+	Operation struct {
+		Type  OperationType
+		Key   string
+		Value Value
+		Tags  map[Tag]bool
+		Time  time.Time
+	}
+	ValueDetail struct {
+		Value     Value
+		Tombstone bool
+	}
+	KeyValue struct {
+		Tags map[Tag]*ValueDetail
+	}
+)
 
-type Operation struct {
-	Type  OperationType
-	Key   string
-	Value Value
-	Tags  map[Tag]bool
-	Time  time.Time
-}
-
-type ValueDetail struct {
-	Value     Value
-	Tombstone bool
-}
-
-type KeyValue struct {
-	Tags map[Tag]*ValueDetail
+func NewMutation(operations ...*Operation) Mutation {
+	return Mutation{
+		Operations: operations,
+	}
 }
 
 func (kv *KeyValue) Resolve() Value {
@@ -62,38 +71,40 @@ func (kv *KeyValue) Resolve() Value {
 type ORSetMap struct {
 	sequence uint64
 	elements map[string]*KeyValue
-	log      []Operation
+	log      []Mutation
 	mu       sync.Mutex
 }
 
 func NewORSetMap() *ORSetMap {
 	return &ORSetMap{
 		elements: make(map[string]*KeyValue),
-		log:      []Operation{},
+		log:      []Mutation{},
 	}
 }
 
-func (o *ORSetMap) applyOperation(op Operation) {
-	switch op.Type {
-	case AddOperation:
-		// TODO: Can there be more than one tags on an add operation?
-		elem, exists := o.elements[op.Key]
-		if !exists {
-			o.elements[op.Key] = &KeyValue{
-				Tags: map[Tag]*ValueDetail{},
+func (o *ORSetMap) applyMutation(mu Mutation) {
+	for _, op := range mu.Operations {
+		switch op.Type {
+		case AddOperation:
+			// TODO: Can there be more than one tags on an add operation?
+			elem, exists := o.elements[op.Key]
+			if !exists {
+				o.elements[op.Key] = &KeyValue{
+					Tags: map[Tag]*ValueDetail{},
+				}
+				elem = o.elements[op.Key]
 			}
-			elem = o.elements[op.Key]
-		}
-		for tag := range op.Tags {
-			elem.Tags[tag] = &ValueDetail{
-				Value: op.Value,
-			}
-		}
-	case RemoveOperation:
-		if elem, ok := o.elements[op.Key]; ok {
 			for tag := range op.Tags {
-				if value, exists := elem.Tags[tag]; exists {
-					value.Tombstone = true
+				elem.Tags[tag] = &ValueDetail{
+					Value: op.Value,
+				}
+			}
+		case RemoveOperation:
+			if elem, ok := o.elements[op.Key]; ok {
+				for tag := range op.Tags {
+					if value, exists := elem.Tags[tag]; exists {
+						value.Tombstone = true
+					}
 				}
 			}
 		}
@@ -117,8 +128,11 @@ func (o *ORSetMap) Add(key string, value Value) {
 		Tags:  map[Tag]bool{newTag: true},
 		Time:  time.Now(),
 	}
-	o.log = append(o.log, op)
-	o.applyOperation(op)
+	mu := Mutation{
+		Operations: []*Operation{&op},
+	}
+	o.log = append(o.log, mu)
+	o.applyMutation(mu)
 }
 
 func (o *ORSetMap) Get(key string) Value {
@@ -149,8 +163,11 @@ func (o *ORSetMap) Remove(key string) {
 		Tags: tagsToBeRemoved,
 		Time: time.Now(),
 	}
-	o.log = append(o.log, op)
-	o.applyOperation(op)
+	mu := Mutation{
+		Operations: []*Operation{&op},
+	}
+	o.log = append(o.log, mu)
+	o.applyMutation(mu)
 }
 
 func (o *ORSetMap) Contains(key string) bool {
@@ -186,20 +203,20 @@ func (o *ORSetMap) List() map[string]Value {
 	return result
 }
 
-func (o *ORSetMap) ExportLog() []Operation {
+func (o *ORSetMap) ExportLog() []Mutation {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	copiedLog := make([]Operation, len(o.log))
+	copiedLog := make([]Mutation, len(o.log))
 	copy(copiedLog, o.log)
 	return copiedLog
 }
 
-func (o *ORSetMap) ImportLog(operations []Operation) {
+func (o *ORSetMap) ImportLog(mutations []Mutation) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	for _, op := range operations {
-		o.applyOperation(op)
+	for _, mu := range mutations {
+		o.applyMutation(mu)
 	}
 }

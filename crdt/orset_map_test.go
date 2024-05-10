@@ -2,6 +2,7 @@ package crdt
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,17 +10,17 @@ import (
 	"github.com/df8f7892-ba65-4f95-ba24-7918c2a94a0b/prototype0/scalar"
 )
 
-func TestORSetMapOperations(t *testing.T) {
+func TestORSetMapmutations(t *testing.T) {
 	tests := []struct {
 		name          string
-		operations    func(set *ORSetMap)
+		mutations     func(set *ORSetMap)
 		wantContains  map[string]bool
 		wantList      map[string]Value
 		testReplicate bool // Indicates if replication via log should be tested
 	}{
 		{
 			name: "Add single elements",
-			operations: func(set *ORSetMap) {
+			mutations: func(set *ORSetMap) {
 				set.Add("fruit", scalar.New("apple"))
 				set.Add("computer", scalar.New("laptop"))
 				set.Add("car", scalar.New("Toyota"))
@@ -39,7 +40,7 @@ func TestORSetMapOperations(t *testing.T) {
 		},
 		{
 			name: "Update existing element",
-			operations: func(set *ORSetMap) {
+			mutations: func(set *ORSetMap) {
 				set.Add("fruit", scalar.New("apple"))
 				set.Add("fruit", scalar.New("banana"))
 			},
@@ -53,7 +54,7 @@ func TestORSetMapOperations(t *testing.T) {
 		},
 		{
 			name: "Remove element",
-			operations: func(set *ORSetMap) {
+			mutations: func(set *ORSetMap) {
 				set.Add("fruit", scalar.New("apple"))
 				set.Remove("fruit")
 			},
@@ -65,7 +66,7 @@ func TestORSetMapOperations(t *testing.T) {
 		},
 		{
 			name: "Remove and re-add element",
-			operations: func(set *ORSetMap) {
+			mutations: func(set *ORSetMap) {
 				set.Add("fruit", scalar.New("apple"))
 				set.Remove("fruit")
 				set.Add("fruit", scalar.New("cherry"))
@@ -80,7 +81,7 @@ func TestORSetMapOperations(t *testing.T) {
 		},
 		{
 			name: "Remove non-existent element",
-			operations: func(set *ORSetMap) {
+			mutations: func(set *ORSetMap) {
 				set.Remove("fruit")
 			},
 			wantContains: map[string]bool{
@@ -91,7 +92,7 @@ func TestORSetMapOperations(t *testing.T) {
 		},
 		{
 			name: "Add, Update, Remove element",
-			operations: func(set *ORSetMap) {
+			mutations: func(set *ORSetMap) {
 				set.Add("fruit", scalar.New("apple"))
 				set.Add("fruit", scalar.New("banana"))
 				set.Remove("fruit")
@@ -107,7 +108,7 @@ func TestORSetMapOperations(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			orsetMap := NewORSetMap()
-			tc.operations(orsetMap)
+			tc.mutations(orsetMap)
 			for key, expected := range tc.wantContains {
 				assert.Equal(t, expected, orsetMap.Contains(key), "Check Contains for key "+key)
 			}
@@ -132,47 +133,47 @@ func TestORSetMapOperations(t *testing.T) {
 
 func TestORSetMapReplication(t *testing.T) {
 	tests := []struct {
-		name       string
-		operations func() []Operation
-		expected   map[string]Value
+		name      string
+		mutations func() []Mutation
+		expected  map[string]Value
 	}{
 		{
 			name: "Add and remove single item",
-			operations: func() []Operation {
+			mutations: func() []Mutation {
 				tag1 := Tag{Sequence: 1}
-				return []Operation{
-					{
+				return []Mutation{
+					NewMutation(&Operation{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag1: true},
-					},
-					{
+					}),
+					NewMutation(&Operation{
 						Type: RemoveOperation,
 						Key:  "fruit",
 						Tags: map[Tag]bool{tag1: true},
-					},
+					}),
 				}
 			},
 			expected: map[string]Value{},
 		},
 		{
 			name: "Add and remove non existent tag",
-			operations: func() []Operation {
+			mutations: func() []Mutation {
 				tag1 := Tag{Sequence: 1}
 				tag2 := Tag{Sequence: 2}
-				return []Operation{
-					{
+				return []Mutation{
+					NewMutation(&Operation{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag1: true},
-					},
-					{
+					}),
+					NewMutation(&Operation{
 						Type: RemoveOperation,
 						Key:  "fruit",
 						Tags: map[Tag]bool{tag2: true},
-					},
+					}),
 				}
 			},
 			expected: map[string]Value{
@@ -181,20 +182,20 @@ func TestORSetMapReplication(t *testing.T) {
 		},
 		{
 			name: "Add multiple items",
-			operations: func() []Operation {
-				return []Operation{
-					{
+			mutations: func() []Mutation {
+				return []Mutation{
+					NewMutation(&Operation{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: scalar.New("apple"),
-						Tags:  map[Tag]bool{Tag{Sequence: 1}: true},
-					},
-					{
+						Tags:  map[Tag]bool{{Sequence: 1}: true},
+					}),
+					NewMutation(&Operation{
 						Type:  AddOperation,
 						Key:   "vegetable",
 						Value: scalar.New("carrot"),
-						Tags:  map[Tag]bool{Tag{Sequence: 2}: true},
-					},
+						Tags:  map[Tag]bool{{Sequence: 2}: true},
+					}),
 				}
 			},
 			expected: map[string]Value{
@@ -204,21 +205,21 @@ func TestORSetMapReplication(t *testing.T) {
 		},
 		{
 			name: "Update existing item",
-			operations: func() []Operation {
+			mutations: func() []Mutation {
 				tag1 := Tag{Sequence: 1}
-				return []Operation{
-					{
+				return []Mutation{
+					NewMutation(&Operation{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag1: true},
-					},
-					{
+					}),
+					NewMutation(&Operation{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: scalar.New("banana"),
 						Tags:  map[Tag]bool{tag1: true},
-					},
+					}),
 				}
 			},
 			expected: map[string]Value{
@@ -227,27 +228,27 @@ func TestORSetMapReplication(t *testing.T) {
 		},
 		{
 			name: "Add item twice, remove only one",
-			operations: func() []Operation {
+			mutations: func() []Mutation {
 				tag1 := Tag{Sequence: 1}
 				tag2 := Tag{Sequence: 2}
-				return []Operation{
-					{
+				return []Mutation{
+					NewMutation(&Operation{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag1: true},
-					},
-					{
+					}),
+					NewMutation(&Operation{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag2: true},
-					},
-					{
+					}),
+					NewMutation(&Operation{
 						Type: RemoveOperation,
 						Key:  "fruit",
 						Tags: map[Tag]bool{tag1: true},
-					},
+					}),
 				}
 			},
 			expected: map[string]Value{
@@ -256,32 +257,32 @@ func TestORSetMapReplication(t *testing.T) {
 		},
 		{
 			name: "Add item twice, remove both",
-			operations: func() []Operation {
+			mutations: func() []Mutation {
 				tag1 := Tag{Sequence: 1}
 				tag2 := Tag{Sequence: 2}
-				return []Operation{
-					{
+				return []Mutation{
+					NewMutation(&Operation{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag1: true},
-					},
-					{
+					}),
+					NewMutation(&Operation{
 						Type:  AddOperation,
 						Key:   "fruit",
 						Value: scalar.New("apple"),
 						Tags:  map[Tag]bool{tag2: true},
-					},
-					{
+					}),
+					NewMutation(&Operation{
 						Type: RemoveOperation,
 						Key:  "fruit",
 						Tags: map[Tag]bool{tag1: true},
-					},
-					{
+					}),
+					NewMutation(&Operation{
 						Type: RemoveOperation,
 						Key:  "fruit",
 						Tags: map[Tag]bool{tag2: true},
-					},
+					}),
 				}
 			},
 			expected: map[string]Value{},
@@ -292,14 +293,54 @@ func TestORSetMapReplication(t *testing.T) {
 		// Create a new ORSetMap for each test case
 		orsetMap := NewORSetMap()
 
-		// Generate and apply operations
-		operations := tt.operations()
-		for _, op := range operations {
-			orsetMap.applyOperation(op)
+		// Generate and apply mutations
+		mutations := tt.mutations()
+		for _, mu := range mutations {
+			orsetMap.applyMutation(mu)
 		}
 
 		// Verify the results
 		result := orsetMap.List()
 		assert.Equal(t, tt.expected, result, fmt.Sprintf("Test case: %s", tt.name))
 	}
+}
+
+func BenchmarkORSetMap(b *testing.B) {
+	const numKeys = 100
+	keys := make([]string, numKeys)
+	for i := 0; i < numKeys; i++ {
+		keys[i] = "key" + strconv.Itoa(i)
+	}
+
+	b.Run("Add", func(b *testing.B) {
+		orSetMap := NewORSetMap()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			orSetMap.Add(keys[i%numKeys], scalar.New("v1"))
+		}
+	})
+
+	b.Run("Get", func(b *testing.B) {
+		orSetMap := NewORSetMap()
+		// Prepopulate the map with values
+		for i := 0; i < numKeys; i++ {
+			orSetMap.Add(keys[i], scalar.New("v1"))
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = orSetMap.Get(keys[i%numKeys])
+		}
+	})
+
+	b.Run("Remove", func(b *testing.B) {
+		orSetMap := NewORSetMap()
+		// Prepopulate the map with values
+		for i := 0; i < numKeys; i++ {
+			orSetMap.Add(keys[i], scalar.New("v1"))
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			orSetMap.Remove(keys[i%numKeys])
+		}
+	})
 }
