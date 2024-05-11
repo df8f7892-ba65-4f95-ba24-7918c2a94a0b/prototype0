@@ -5,7 +5,9 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/dominikbraun/graph"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/df8f7892-ba65-4f95-ba24-7918c2a94a0b/prototype0/scalar"
 )
@@ -116,10 +118,12 @@ func TestORSetMapmutations(t *testing.T) {
 			gotList := orsetMap.List()
 			assert.Equal(t, tc.wantList, gotList, "Check List matches expected")
 
-			// Test replication if required
+			// Test replication if requested
 			if tc.testReplicate {
+				log, err := orsetMap.ExportLog()
+				require.NoError(t, err)
+
 				anotherORSetMap := NewORSetMap()
-				log := orsetMap.ExportLog()
 				anotherORSetMap.ImportLog(log)
 				for key, expected := range tc.wantContains {
 					assert.Equal(t, expected, anotherORSetMap.Contains(key), "Replicated Check Contains for key "+key)
@@ -305,6 +309,58 @@ func TestORSetMapReplication(t *testing.T) {
 	}
 }
 
+func TestGetLeaves(t *testing.T) {
+	orsetMap := newTestORSetMap()
+	orsetMap.Add("fruit", scalar.New("apple"))
+	orsetMap.Add("fruit", scalar.New("banana"))
+	orsetMap.Add("vegetable", scalar.New("carrot"))
+
+	leaves, err := orsetMap.getLeaves()
+	assert.NoError(t, err)
+
+	assert.Equal(t, 1, len(leaves))
+	assert.Equal(t, "add-carrot", leaves[0])
+}
+
+// newTestORSetMap creates a new ORSetMap instance, overriding the log
+// with a new directed acyclic graph that uses a test hash function.
+func newTestORSetMap() *ORSetMap {
+	orsetMap := NewORSetMap()
+	orsetMap.hasher = testHashMutation
+	orsetMap.log = graph.New(
+		testHashMutation,
+		graph.Directed(),
+		graph.Acyclic(),
+	)
+	return orsetMap
+}
+
+// testHashMutation is a helper function that returns the value
+// of a mutation as a string to make it easier for testing.
+func testHashMutation(mu Mutation) string {
+	hash := ""
+	for _, op := range mu.Operations {
+		switch op.Type {
+		case AddOperation:
+			hash += "add-"
+			s, ok := op.Value.String()
+			if !ok {
+				continue
+			}
+			hash += s
+		case RemoveOperation:
+			hash += fmt.Sprintf("remove-%v", op.Key)
+		}
+	}
+	return hash
+
+	// b, err := json.Marshal(mu)
+	// if err != nil {
+	// 	panic("failed to marshal mutation: " + err.Error())
+	// }
+	// return string(b)
+}
+
 func BenchmarkORSetMap(b *testing.B) {
 	const numKeys = 100
 	keys := make([]string, numKeys)
@@ -343,4 +399,13 @@ func BenchmarkORSetMap(b *testing.B) {
 			orSetMap.Remove(keys[i%numKeys])
 		}
 	})
+}
+
+func assume[T scalar.ScalarValue](v Value) T {
+	s, ok := v.(*scalar.Scalar[T])
+	if !ok {
+		return *new(T)
+	}
+
+	return s.Value
 }
