@@ -201,8 +201,16 @@ func (o *ORSetMap) applyMutation(mu Mutation) {
 	}
 }
 
+// gerOrderedMutations returns the mutations in the log in a stable topological
+// order.
 func (o *ORSetMap) gerOrderedMutations() ([]Mutation, error) {
-	order, err := graph.TopologicalSort(o.log)
+	order, err := graph.StableTopologicalSort(
+		o.log,
+		// TODO: Reconsider the comparison function.
+		func(a, b string) bool {
+			return a < b
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to topologically sort the log: %w", err)
 	}
