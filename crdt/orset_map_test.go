@@ -18,6 +18,7 @@ func TestORSetMapmutations(t *testing.T) {
 		mutations     func(set *ORSetMap)
 		wantContains  map[string]bool
 		wantList      map[string]Value
+		wantState     State
 		testReplicate bool // Indicates if replication via log should be tested
 	}{
 		{
@@ -38,6 +39,7 @@ func TestORSetMapmutations(t *testing.T) {
 				"computer": scalar.New("laptop"),
 				"car":      scalar.New("Toyota"),
 			},
+			wantState:     Complete,
 			testReplicate: true,
 		},
 		{
@@ -52,6 +54,7 @@ func TestORSetMapmutations(t *testing.T) {
 			wantList: map[string]Value{
 				"fruit": scalar.New("banana"),
 			},
+			wantState:     Complete,
 			testReplicate: true,
 		},
 		{
@@ -64,6 +67,7 @@ func TestORSetMapmutations(t *testing.T) {
 				"fruit": false,
 			},
 			wantList:      map[string]Value{},
+			wantState:     Complete,
 			testReplicate: true,
 		},
 		{
@@ -79,6 +83,7 @@ func TestORSetMapmutations(t *testing.T) {
 			wantList: map[string]Value{
 				"fruit": scalar.New("cherry"),
 			},
+			wantState:     Complete,
 			testReplicate: true,
 		},
 		{
@@ -90,6 +95,30 @@ func TestORSetMapmutations(t *testing.T) {
 				"fruit": false,
 			},
 			wantList:      map[string]Value{},
+			wantState:     Complete,
+			testReplicate: true,
+		},
+		{
+			name: "Add, Update with unknown parents",
+			mutations: func(set *ORSetMap) {
+				set.Add("fruit", scalar.New("apple"))
+				set.appendMutation(Mutation{
+					Operations: []*Operation{{
+						Type:  AddOperation,
+						Key:   "fruit",
+						Value: scalar.New("banana"),
+						Tags:  map[Tag]bool{{Sequence: 1}: true},
+					}},
+					Parents: []string{"unknown"},
+				})
+			},
+			wantContains: map[string]bool{
+				"fruit": true,
+			},
+			wantList: map[string]Value{
+				"fruit": scalar.New("apple"),
+			},
+			wantState:     Partial,
 			testReplicate: true,
 		},
 		{
@@ -103,6 +132,7 @@ func TestORSetMapmutations(t *testing.T) {
 				"fruit": false,
 			},
 			wantList:      map[string]Value{},
+			wantState:     Complete,
 			testReplicate: true,
 		},
 	}
@@ -117,6 +147,7 @@ func TestORSetMapmutations(t *testing.T) {
 
 			gotList := orsetMap.List()
 			assert.Equal(t, tc.wantList, gotList, "Check List matches expected")
+			assert.Equal(t, tc.wantState, orsetMap.State(), "Check State matches expected")
 
 			// Test replication if requested
 			if tc.testReplicate {
@@ -128,8 +159,10 @@ func TestORSetMapmutations(t *testing.T) {
 				for key, expected := range tc.wantContains {
 					assert.Equal(t, expected, anotherORSetMap.Contains(key), "Replicated Check Contains for key "+key)
 				}
+
 				gotReplicatedList := anotherORSetMap.List()
 				assert.Equal(t, tc.wantList, gotReplicatedList, "Replicated Check List matches expected")
+				assert.Equal(t, tc.wantState, anotherORSetMap.State(), "Replicated Check State matches expected")
 			}
 		})
 	}

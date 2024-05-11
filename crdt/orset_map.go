@@ -29,6 +29,14 @@ const (
 	RemoveOperation
 )
 
+type State int
+
+const (
+	Empty    State = iota
+	Partial  State = iota
+	Complete State = iota
+)
+
 type (
 	Tag struct {
 		Sequence uint64
@@ -54,10 +62,11 @@ type (
 		Tags map[Tag]*ValueDetail
 	}
 	ORSetMap struct {
-		hasher    func(Mutation) string
+		state     State
 		sequence  uint64
 		mutations map[string]bool // mutations applied
 		elements  map[string]*KeyValue
+		hasher    func(Mutation) string
 		log       graph.Graph[string, Mutation]
 		mu        sync.Mutex
 	}
@@ -74,8 +83,8 @@ func (t Tags) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
+// TODO: Implement a proper hashing function
 func HashMutation(mu Mutation) string {
-	// TODO: Implement a proper hashing function
 	json, err := json.Marshal(mu)
 	if err != nil {
 		panic(err)
@@ -98,10 +107,11 @@ func (kv *KeyValue) Resolve() Value {
 
 func NewORSetMap() *ORSetMap {
 	return &ORSetMap{
-		hasher:    HashMutation,
+		state:     Empty,
 		sequence:  0,
 		mutations: make(map[string]bool),
 		elements:  make(map[string]*KeyValue),
+		hasher:    HashMutation,
 		log: graph.New(
 			HashMutation,
 			graph.Directed(),
@@ -167,12 +177,23 @@ func (o *ORSetMap) appendMutation(mus ...Mutation) error {
 }
 
 func (o *ORSetMap) applyMutation(mu Mutation) {
-	if o.mutations[o.hasher(mu)] {
+	if _, applied := o.mutations[o.hasher(mu)]; applied {
 		return
 	}
 
+	// check if all parents are applied
+	for _, parent := range mu.Parents {
+		if !o.mutations[parent] {
+			o.state = Partial
+			o.mutations[o.hasher(mu)] = false
+			return
+		}
+	}
+
+	// mark mutation as applied
 	o.mutations[o.hasher(mu)] = true
 
+	// apply operations
 	for _, op := range mu.Operations {
 		switch op.Type {
 		case AddOperation:
@@ -199,6 +220,17 @@ func (o *ORSetMap) applyMutation(mu Mutation) {
 			}
 		}
 	}
+
+	// check if all mutations are applied
+	for _, applied := range o.mutations {
+		if !applied {
+			o.state = Partial
+			return
+		}
+	}
+
+	// all mutations applied
+	o.state = Complete
 }
 
 // gerOrderedMutations returns the mutations in the log in a stable topological
@@ -300,6 +332,13 @@ func (o *ORSetMap) Remove(key string) {
 	}
 
 	o.appendMutation(mu)
+}
+
+func (o *ORSetMap) State() State {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	return o.state
 }
 
 func (o *ORSetMap) Contains(key string) bool {
